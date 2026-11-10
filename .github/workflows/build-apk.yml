@@ -1,0 +1,94 @@
+name: Construir APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Preparar proyecto
+        run: |
+          RUTA=$(find . -name index.html -not -path "./node_modules/*" -not -path "./android/*" | head -n 1)
+          if [ -z "$RUTA" ]; then echo "No encontré index.html en el repo"; exit 1; fi
+          SRC=$(dirname "$RUTA")
+          echo "Usando la carpeta: $SRC"
+          mkdir -p /tmp/webapp
+          for f in index.html jszip.min.js manifest.json sw.js icon-192.png icon-512.png; do
+            if [ -f "$SRC/$f" ]; then cp "$SRC/$f" /tmp/webapp/; fi
+          done
+          rm -rf www
+          mv /tmp/webapp www
+          cat > package.json <<'EOT'
+          {
+            "name": "gitapp",
+            "version": "1.0.0",
+            "private": true,
+            "dependencies": {
+              "@capacitor/android": "^7.0.0",
+              "@capacitor/cli": "^7.0.0",
+              "@capacitor/core": "^7.0.0"
+            }
+          }
+          EOT
+          cat > capacitor.config.json <<'EOT'
+          {
+            "appId": "com.gitapp.app",
+            "appName": "GitApp",
+            "webDir": "www",
+            "backgroundColor": "#0d1117"
+          }
+          EOT
+          ls -la www
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Crear proyecto Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Guardar APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: GitApp-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publicar APK en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk GitApp.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest GitApp.apk --target "${{ github.sha }}" --title "GitApp (última versión)" --notes "APK generado automáticamente por GitHub Actions."
