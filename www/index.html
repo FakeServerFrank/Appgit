@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GitApp</title>
+<style>
+:root{--bg:#0d1117;--card:#161b22;--line:#30363d;--txt:#e6edf3;--mut:#8b949e;--ok:#238636;--acc:#58a6ff;--err:#f85149}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);font:16px system-ui,sans-serif;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--bg)}
+h1{font-size:18px;margin:0}
+main{padding:16px;max-width:600px;margin:auto}
+input,button{font:inherit;border-radius:8px;border:1px solid var(--line);padding:12px;width:100%;background:var(--card);color:var(--txt)}
+button{background:var(--ok);border:0;font-weight:600;margin-top:10px}
+button.sec{background:var(--card);border:1px solid var(--line)}
+button.sm{width:auto;padding:8px 12px;margin:0;font-size:14px}
+label{display:flex;gap:8px;align-items:center;margin-top:10px;color:var(--mut)}
+label input{width:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:10px}
+.tap{cursor:pointer}
+.card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+.card button.sm{float:right;margin-top:-4px}
+.repo b,.dir{color:var(--acc)}
+.mut{color:var(--mut);font-size:14px}
+.err{color:var(--err);margin-top:10px}
+.hide{display:none}
+#log{white-space:pre-wrap;font:13px monospace;color:var(--mut);margin-top:10px;max-height:200px;overflow:auto}
+#codigo{width:100%;height:50vh;margin-top:10px;background:#010409;color:var(--txt);border:1px solid var(--line);border-radius:8px;padding:10px;font:14px/1.4 monospace;white-space:pre;overflow:auto;resize:none;tab-size:2}
+#simbolos{display:flex;gap:6px;overflow-x:auto;margin-top:10px;padding-bottom:4px}
+#simbolos button{width:auto;min-width:40px;margin:0;padding:8px 10px;background:var(--card);border:1px solid var(--line);font-family:monospace}
+.ok{color:#3fb950;margin-top:10px}
+select{font:inherit;border-radius:8px;border:1px solid var(--line);padding:10px;background:var(--card);color:var(--txt);min-width:0}
+button.rojo{background:#b62324}
+</style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d1117">
+<link rel="icon" href="icon-192.png">
+<script src="jszip.min.js"></script>
+</head>
+<body>
+<header><h1 id="titulo">GitApp v4</h1><button id="salir" class="sec sm hide">Salir</button></header>
+<main>
+  <!-- LOGIN -->
+  <section id="login">
+    <p class="mut">Pega tu token de GitHub (permiso <b>repo</b>). Se guarda solo en este teléfono.</p>
+    <input id="token" type="password" placeholder="ghp_xxxxxxxx" autocomplete="off">
+    <button id="entrar">Entrar</button>
+    <div id="errLogin" class="err"></div>
+  </section>
+
+  <!-- REPOS -->
+  <section id="repos" class="hide">
+    <div class="mut" id="quien"></div>
+    <div class="card">
+      <b>Crear repositorio</b>
+      <input id="nombre" placeholder="nombre-del-repo" style="margin-top:10px">
+      <input id="desc" placeholder="Descripción (opcional)" style="margin-top:10px">
+      <label><input type="checkbox" id="priv"> Privado</label>
+      <button id="crear">Crear repo</button>
+      <div id="errCrear" class="err"></div>
+    </div>
+    <h3>Tus repositorios</h3>
+    <div id="lista"></div>
+  </section>
+
+  <!-- REPO ABIERTO -->
+  <section id="repo" class="hide">
+    <button id="volver" class="sec sm">← Repos</button>
+    <div class="mut" id="ruta" style="margin-top:10px"></div>
+    <div id="aviso" class="err"></div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <select id="selRama" style="flex:1"></select>
+      <button id="btnRama" class="sec sm">＋ Rama</button>
+      <button id="btnHist" class="sec sm">🕘 Historial</button>
+    </div>
+    <div id="panelRama" class="card hide">
+      <input id="nombreRama" placeholder="nombre-de-la-rama">
+      <button id="crearRama">Crear rama desde la actual</button>
+    </div>
+    <div id="panelHist" class="hide"></div>
+    <div class="card">
+      <b>Subir a esta carpeta</b>
+      <input id="mensaje" placeholder="Mensaje del commit (opcional)" style="margin-top:10px">
+      <button id="btnArch" class="sec">📄 Subir archivos</button>
+      <button id="btnZip" class="sec">🗜️ Subir zip (se descomprime)</button>
+      <button id="btnNuevo" class="sec">✏️ Nuevo archivo (escribir código)</button>
+      <label><input type="checkbox" id="quitarRaiz" checked> Quitar la carpeta raíz del zip</label>
+      <input type="file" id="fArch" multiple class="hide">
+      <input type="file" id="fZip" accept=".zip" class="hide">
+      <div id="log"></div>
+    </div>
+    <div id="contenido"></div>
+  </section>
+<!-- EDITOR -->
+  <section id="editor" class="hide">
+    <button id="cerrarEd" class="sec sm">← Volver</button>
+    <div class="mut" id="rutaEd" style="margin-top:10px"></div>
+    <input id="nombreEd" class="hide" placeholder="nombre.js o carpeta/nombre.html" style="margin-top:10px">
+    <div id="simbolos"></div>
+    <textarea id="codigo" wrap="off" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off"></textarea>
+    <input id="msgEd" placeholder="Mensaje del commit (opcional)" style="margin-top:10px">
+    <button id="guardarEd">💾 Guardar (commit)</button>
+    <div id="accionesEd" class="card hide">
+      <input id="renombrarA" placeholder="Nueva ruta (ej: carpeta/nuevo.js)">
+      <button id="btnRenombrar" class="sec">↪️ Renombrar / mover</button>
+      <button id="btnBorrar" class="rojo">🗑️ Borrar archivo</button>
+    </div>
+    <div id="estadoEd"></div>
+  </section>
+</main>
+
+<script>
+const API = "https://api.github.com";
+const $ = id => document.getElementById(id);
+let token = "", owner = "", repo = "", path = "", rama = "";
+
+function guardar(t){ try{ localStorage.setItem("gh_token", t); }catch(e){} }
+function leer(){ try{ return localStorage.getItem("gh_token") || ""; }catch(e){ return ""; } }
+function borrar(){ try{ localStorage.removeItem("gh_token"); }catch(e){} }
+function esc(s){ return String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+const encPath = p => p.split("/").map(encodeURIComponent).join("/");
+function vista(v){
+  ["login","repos","repo","editor"].forEach(s => $(s).classList.toggle("hide", s !== v));
+  $("salir").classList.toggle("hide", v === "login");
+}
+
+async function gh(ruta, opts = {}){
+  const r = await fetch(API + ruta, {
+    ...opts,
+    headers: { "Authorization":"Bearer "+token, "Accept":"application/vnd.github+json", "Content-Type":"application/json" }
+  });
+  const data = await r.json().catch(() => ({}));
+  if(!r.ok){ const e = new Error(data.message || ("Error "+r.status)); e.status = r.status; throw e; }
+  return data;
+}
+
+/* ---------- REPOS ---------- */
+let reposData = [];
+async function cargarRepos(){
+  $("lista").innerHTML = '<p class="mut">Cargando…</p>';
+  try{
+    reposData = await gh("/user/repos?per_page=100&sort=updated");
+    $("lista").innerHTML = reposData.length ? reposData.map((r,i) => `
+      <div class="card repo tap" data-i="${i}">
+        <b>${esc(r.name)}</b> ${r.private ? "🔒" : ""}
+        <div class="mut">${esc(r.description || "Sin descripción")}</div>
+      </div>`).join("") : '<p class="mut">Aún no tienes repositorios.</p>';
+  }catch(e){ $("lista").innerHTML = '<p class="err">'+esc(e.message)+'</p>'; }
+}
+$("lista").onclick = e => {
+  const c = e.target.closest(".repo"); if(!c) return;
+  const r = reposData[+c.dataset.i];
+  owner = r.owner.login; repo = r.name; path = "";
+  rama = r.default_branch; $("log").textContent = ""; $("panelHist").classList.add("hide"); $("panelRama").classList.add("hide");
+  vista("repo"); cargarRamas(); listar();
+};
+
+async function entrar(t){
+  token = t.trim(); $("errLogin").textContent = "";
+  try{
+    const u = await gh("/user");
+    guardar(token);
+    $("quien").textContent = "Conectado como " + u.login;
+    vista("repos"); cargarRepos();
+  }catch(e){ $("errLogin").textContent = "Token no válido: " + e.message; }
+}
+$("entrar").onclick = () => entrar($("token").value);
+$("crear").onclick = async () => {
+  const name = $("nombre").value.trim(); $("errCrear").textContent = "";
+  if(!name){ $("errCrear").textContent = "Escribe un nombre."; return; }
+  try{
+    await gh("/user/repos", { method:"POST", body: JSON.stringify({ name, description:$("desc").value.trim(), private:$("priv").checked, auto_init:true }) });
+    $("nombre").value = ""; $("desc").value = ""; cargarRepos();
+  }catch(e){ $("errCrear").textContent = e.message; }
+};
+$("salir").onclick = () => { borrar(); token = ""; $("token").value = ""; vista("login"); };
+$("volver").onclick = () => { vista("repos"); cargarRepos(); };
+
+/* ---------- CARPETAS ---------- */
+async function listar(){
+  $("ruta").textContent = owner + "/" + repo + "/" + path; $("panelHist").classList.add("hide");
+  $("contenido").innerHTML = '<p class="mut">Cargando…</p>';
+  try{
+    const items = await gh(`/repos/${owner}/${repo}/contents/${encPath(path)}?ref=${encodeURIComponent(rama)}`);
+    items.sort((a,b) => (a.type === b.type) ? a.name.localeCompare(b.name) : (a.type === "dir" ? -1 : 1));
+    let h = path ? '<div class="card tap" data-up="1">⬆️ Subir un nivel</div>' : "";
+    h += items.map(i => `<div class="card ${i.type === "dir" ? "tap dir" : "tap"}" data-dir="${i.type === "dir" ? esc(i.path) : ""}" data-file="${i.type === "file" ? esc(i.path) : ""}">${i.type === "dir" ? "📁" : "📄"} ${esc(i.name)}${i.type === "file" ? `<button class="sm" data-edit="${esc(i.path)}">✏️ Editar</button>` : ""}</div>`).join("");
+    $("contenido").innerHTML = h || '<p class="mut">Carpeta vacía.</p>';
+  }catch(e){
+    $("contenido").innerHTML = e.status === 404 ? '<p class="mut">Repo vacío. Sube tu primer archivo.</p>' : '<p class="err">'+esc(e.message)+'</p>';
+  }
+}
+$("contenido").onclick = e => {
+  const b = e.target.closest("[data-edit]");
+  if(b){ abrirArchivo(b.dataset.edit); return; }
+  const c = e.target.closest(".card"); if(!c) return;
+  if(c.dataset.up){ path = path.split("/").slice(0,-1).join("/"); listar(); }
+  else if(c.dataset.dir){ path = c.dataset.dir; listar(); }
+  else if(c.dataset.file){ abrirArchivo(c.dataset.file); }
+};
+
+/* ---------- SUBIDA ---------- */
+function log(t){ $("log").textContent += t + "\n"; $("log").scrollTop = 1e9; }
+function aBase64(file){
+  return new Promise((ok, mal) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result.split(",")[1]);
+    r.onerror = () => mal(new Error("No pude leer " + file.name));
+    r.readAsDataURL(file);
+  });
+}
+async function subirUno(rutaRepo, b64){
+  let sha;
+  try{ sha = (await gh(`/repos/${owner}/${repo}/contents/${encPath(rutaRepo)}?ref=${encodeURIComponent(rama)}`)).sha; }catch(e){ if(e.status !== 404) throw e; }
+  const msg = $("mensaje").value.trim() || ((sha ? "Actualizar " : "Subir ") + rutaRepo);
+  await gh(`/repos/${owner}/${repo}/contents/${encPath(rutaRepo)}`, { method:"PUT", body: JSON.stringify({ message: msg, content: b64, branch: rama, ...(sha ? { sha } : {}) }) });
+}
+const destino = n => (path ? path + "/" : "") + n;
+
+async function subirArchivos(files){
+  $("log").textContent = "";
+  for(const f of files){
+    try{ log("⏳ " + f.name); await subirUno(destino(f.name), await aBase64(f)); log("✅ " + f.name); }
+    catch(e){ log("❌ " + f.name + ": " + e.message); }
+  }
+  log("Listo."); listar();
+}
+
+async function subirZip(file){
+  $("log").textContent = "";
+  if(typeof JSZip === "undefined"){ log("❌ No cargó JSZip. Revisa tu internet."); return; }
+  try{
+    const zip = await JSZip.loadAsync(file);
+    let nombres = Object.keys(zip.files).filter(n => !zip.files[n].dir && !n.startsWith("__MACOSX") && !n.endsWith(".DS_Store"));
+    let quitar = 0;
+    if($("quitarRaiz").checked && nombres.length){
+      const raiz = nombres[0].split("/")[0] + "/";
+      if(nombres.every(n => n.startsWith(raiz))) quitar = raiz.length;
+    }
+    log("Archivos en el zip: " + nombres.length);
+    let n = 0;
+    for(const nombre of nombres){
+      const limpio = nombre.slice(quitar);
+      try{ await subirUno(destino(limpio), await zip.files[nombre].async("base64")); n++; log("✅ " + limpio + " (" + n + "/" + nombres.length + ")"); }
+      catch(e){ log("❌ " + limpio + ": " + e.message); }
+    }
+    log("Listo: " + n + " subidos.");
+  }catch(e){ log("❌ Zip: " + e.message); }
+  listar();
+}
+
+$("btnArch").onclick = () => $("fArch").click();
+$("btnZip").onclick = () => $("fZip").click();
+$("fArch").onchange = e => { if(e.target.files.length) subirArchivos([...e.target.files]); e.target.value = ""; };
+$("fZip").onchange = e => { if(e.target.files[0]) subirZip(e.target.files[0]); e.target.value = ""; };
+
+/* ---------- EDITOR ---------- */
+let edPath = "", edSha = "", edNuevo = false;
+const b64aTexto = b => new TextDecoder().decode(Uint8Array.from(atob(b.replace(/\n/g, "")), c => c.charCodeAt(0)));
+function textoAb64(t){
+  const by = new TextEncoder().encode(t); let s = "";
+  for(let i = 0; i < by.length; i += 8192) s += String.fromCharCode(...by.subarray(i, i + 8192));
+  return btoa(s);
+}
+function estado(t, ok){ $("estadoEd").className = ok ? "ok" : "err"; $("estadoEd").textContent = t; }
+function ins(t){ const a = $("codigo"); a.setRangeText(t, a.selectionStart, a.selectionEnd, "end"); a.focus(); }
+
+["Tab","{","}","(",")","[","]",";",":","\"","'","<",">","=","/","\\","`","$","!","&","|","_","#"].forEach(k => {
+  const b = document.createElement("button");
+  b.textContent = k === "Tab" ? "⇥" : k;
+  b.onpointerdown = e => { e.preventDefault(); ins(k === "Tab" ? "  " : k); };
+  $("simbolos").appendChild(b);
+});
+
+async function abrirArchivo(p){
+  $("aviso").textContent = "Abriendo " + p + "…";
+  try{
+    const f = await gh(`/repos/${owner}/${repo}/contents/${encPath(p)}?ref=${encodeURIComponent(rama)}`);
+    if(f.encoding !== "base64" || f.size > 900000){ $("aviso").textContent = "Archivo demasiado grande para editar aquí."; return; }
+    const txt = b64aTexto(f.content);
+    if(txt.includes("\u0000")){ $("aviso").textContent = "Parece un archivo binario (imagen, zip…). No se puede editar."; return; }
+    edPath = p; edSha = f.sha; edNuevo = false;
+    $("accionesEd").classList.remove("hide"); $("renombrarA").value = p;
+    $("rutaEd").textContent = owner + "/" + repo + "/" + p;
+    $("nombreEd").classList.add("hide");
+    $("codigo").value = txt; $("msgEd").value = ""; estado("");
+    $("aviso").textContent = "";
+    vista("editor");
+  }catch(e){ $("aviso").textContent = "Error al abrir: " + e.message; }
+}
+
+$("btnNuevo").onclick = () => {
+  edNuevo = true; edPath = ""; edSha = ""; $("accionesEd").classList.add("hide");
+  $("rutaEd").textContent = "Nuevo archivo en " + owner + "/" + repo + "/" + path;
+  $("nombreEd").classList.remove("hide"); $("nombreEd").value = "";
+  $("codigo").value = ""; $("msgEd").value = ""; estado("");
+  vista("editor");
+};
+
+$("guardarEd").onclick = async () => {
+  let ruta = edPath;
+  if(edNuevo){
+    const n = $("nombreEd").value.trim().replace(/^\/+/, "");
+    if(!n){ estado("Escribe el nombre del archivo."); return; }
+    ruta = destino(n);
+  }
+  estado("Guardando…", true);
+  try{
+    const res = await gh(`/repos/${owner}/${repo}/contents/${encPath(ruta)}`, { method:"PUT", body: JSON.stringify({
+      message: $("msgEd").value.trim() || ((edNuevo ? "Crear " : "Editar ") + ruta),
+      content: textoAb64($("codigo").value), branch: rama,
+      ...(edSha ? { sha: edSha } : {})
+    })});
+    edSha = res.content.sha; edPath = ruta; edNuevo = false;
+    $("accionesEd").classList.remove("hide"); $("renombrarA").value = ruta;
+    $("rutaEd").textContent = owner + "/" + repo + "/" + ruta;
+    $("nombreEd").classList.add("hide");
+    estado("✅ Guardado (commit hecho)", true);
+  }catch(e){
+    estado(e.status === 409 || e.status === 422 ? "Conflicto: el archivo cambió o ya existe. Ábrelo de nuevo. (" + e.message + ")" : e.message);
+  }
+};
+$("cerrarEd").onclick = () => { vista("repo"); listar(); };
+
+/* ---------- RAMAS ---------- */
+let ramasData = [];
+async function cargarRamas(){
+  try{ ramasData = await gh(`/repos/${owner}/${repo}/branches?per_page=100`); }catch(e){ ramasData = []; }
+  $("selRama").innerHTML = ramasData.map(b => `<option ${b.name === rama ? "selected" : ""}>${esc(b.name)}</option>`).join("");
+}
+$("selRama").onchange = e => { rama = e.target.value; path = ""; listar(); };
+$("btnRama").onclick = () => $("panelRama").classList.toggle("hide");
+$("crearRama").onclick = async () => {
+  const n = $("nombreRama").value.trim().replace(/\s+/g, "-");
+  if(!n) return;
+  try{
+    const b = ramasData.find(x => x.name === rama);
+    await gh(`/repos/${owner}/${repo}/git/refs`, { method:"POST", body: JSON.stringify({ ref: "refs/heads/" + n, sha: b.commit.sha }) });
+    rama = n; $("nombreRama").value = ""; $("panelRama").classList.add("hide");
+    await cargarRamas(); path = ""; listar();
+  }catch(e){ $("aviso").textContent = "No pude crear la rama: " + e.message; }
+};
+
+/* ---------- HISTORIAL ---------- */
+$("btnHist").onclick = async () => {
+  const p = $("panelHist");
+  if(!p.classList.contains("hide")){ p.classList.add("hide"); return; }
+  p.classList.remove("hide"); p.innerHTML = '<p class="mut">Cargando…</p>';
+  try{
+    const q = `?sha=${encodeURIComponent(rama)}&per_page=20` + (path ? `&path=${encodeURIComponent(path)}` : "");
+    const cs = await gh(`/repos/${owner}/${repo}/commits${q}`);
+    p.innerHTML = cs.length ? cs.map(c => `<div class="card"><b>${esc(c.commit.message.split("\n")[0])}</b><div class="mut">${esc(c.sha.slice(0,7))} · ${esc(c.commit.author.name)} · ${esc(new Date(c.commit.author.date).toLocaleString())}</div></div>`).join("") : '<p class="mut">Sin commits.</p>';
+  }catch(e){ p.innerHTML = '<p class="err">' + esc(e.message) + '</p>'; }
+};
+
+/* ---------- BORRAR / RENOMBRAR ---------- */
+$("btnBorrar").onclick = async () => {
+  const b = $("btnBorrar");
+  if(!b.dataset.sure){
+    b.dataset.sure = "1"; b.textContent = "⚠️ Toca otra vez para confirmar";
+    setTimeout(() => { delete b.dataset.sure; b.textContent = "🗑️ Borrar archivo"; }, 4000);
+    return;
+  }
+  delete b.dataset.sure; b.textContent = "🗑️ Borrar archivo";
+  try{
+    await gh(`/repos/${owner}/${repo}/contents/${encPath(edPath)}`, { method:"DELETE", body: JSON.stringify({ message: $("msgEd").value.trim() || ("Borrar " + edPath), sha: edSha, branch: rama }) });
+    vista("repo"); listar();
+  }catch(e){ estado(e.message); }
+};
+$("btnRenombrar").onclick = async () => {
+  const n = $("renombrarA").value.trim().replace(/^\/+/, "");
+  if(!n || n === edPath){ estado("Escribe una ruta nueva distinta."); return; }
+  estado("Moviendo…", true);
+  try{
+    const res = await gh(`/repos/${owner}/${repo}/contents/${encPath(n)}`, { method:"PUT", body: JSON.stringify({ message: "Mover " + edPath + " a " + n, content: textoAb64($("codigo").value), branch: rama }) });
+    await gh(`/repos/${owner}/${repo}/contents/${encPath(edPath)}`, { method:"DELETE", body: JSON.stringify({ message: "Mover " + edPath + " a " + n, sha: edSha, branch: rama }) });
+    edPath = n; edSha = res.content.sha;
+    $("rutaEd").textContent = owner + "/" + repo + "/" + n;
+    estado("✅ Movido a " + n, true);
+  }catch(e){ estado(e.status === 422 ? "Ya existe un archivo en esa ruta." : e.message); }
+};
+
+if("serviceWorker" in navigator){ navigator.serviceWorker.register("sw.js").catch(()=>{}); }
+
+const guardado = leer();
+if(guardado) entrar(guardado);
+</script>
+</body>
+</html>
